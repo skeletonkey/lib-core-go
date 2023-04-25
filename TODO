@@ -7,3 +7,4 @@
 * allow use to disable hot-reloading
 * make refresh time configurable
 * add github workflows - this requires a 'lib' part of lib-instance-gen-go
+    * should also consider automating the logger/config.go file

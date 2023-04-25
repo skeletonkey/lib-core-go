@@ -38,8 +38,6 @@ func main() {
 }
 ```
 
-
-
 ### Caveat Emptor
 
 At this time 'secrets' are written directly into the config file.  It is _HIGHLY_ recommended that you DO NOT check it into source control. This will hopefully be addressed in the future.
@@ -58,3 +56,23 @@ Hot Reloading things to know:
 * if the config is messed up (like breaking the JSON) it will cause the program to panic
     * recommended not to use an editor that autosaves without linting
     * bug report has been submitted
+
+## logger
+
+Package logger provides a convenience method for setting up rs/zerolog and returning a logger.
+
+See rs/zerlog documentation for how to properly log.
+
+To use properly ensure that the following exists in the application's config:
+
+```json
+{
+  "logger": {
+    "log_file": "/var/log/my_application.log",
+    "log_level": "debug",
+    "to_file": true,
+    "to_stderr": false,
+    "to_stdout": false
+  }
+}
+```
