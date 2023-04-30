@@ -11,7 +11,6 @@ import (
 	"github.com/natefinch/lumberjack"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
-	"github.com/skeletonkey/lib-core-go/config"
 )
 
 var log *zerolog.Logger
@@ -69,13 +68,8 @@ func (l *Logger) Initialize() {
 	log = &tempLog
 }
 
-var once sync.Once
-
 // Get a reference to the zerolog.Logger with the appropriate configured settings.
 func Get() *zerolog.Logger {
 	logCfg = getConfig()
-	once.Do(func() {
-		config.RegisterInitializer("logger", logCfg)
-	})
 	return log
 }

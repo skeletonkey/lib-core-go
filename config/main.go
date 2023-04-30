@@ -16,14 +16,12 @@ type Initializer interface {
 
 type configMapType map[string][]byte
 type configPtrsType map[string]any
-type initMapType map[string]Initializer
 type config struct {
 	configFile   string         // location of the config json file
 	configs      configMapType  // map containing json representation of each top level key
 	configPtrs   configPtrsType // map of pointers to existing config objects
 	lastLoad     time.Time      // time of last config load
 	reload       bool           // set to true if config file needs to be reloaded
-	initializers initMapType    // initialization functions that some modules may need
 }
 
 const configFileString = "RACHIO_CONFIG_FILE"
@@ -35,7 +33,6 @@ func init() {
 
 	cfg.configs = make(configMapType)
 	cfg.configPtrs = make(configPtrsType)
-	cfg.initializers = make(initMapType)
 	cfg.lastLoad = time.Now()
 	cfg.reload = true
 }
@@ -106,8 +103,8 @@ func load() {
 			}
 		}
 
-		if _, ok := cfg.initializers[key]; ok {
-			cfg.initializers[key].Initialize()
+		if initializer, ok := cfg.configPtrs[key].(Initializer); ok {
+			initializer.Initialize()
 		}
 	}
 }
@@ -152,12 +149,4 @@ func LoadConfig(name string, configStruct interface{}) {
 		}
 		cfg.configPtrs[name] = &configStruct
 	}
-}
-
-// RegisterInitializer 'registers' the struct as being able to be initialized and runs that routine.
-//
-//	TODO: this should be replaced as this should be done programmatically
-func RegisterInitializer(name string, initFunc Initializer) {
-	cfg.initializers[name] = initFunc
-	initFunc.Initialize()
 }

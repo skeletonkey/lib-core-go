@@ -2,7 +2,6 @@
 
 ## Bugs
 
-* do we have to 'register' Initializers??? Should we be able to say Initialize if you're an Initializer
 * if someone breaks the config file while things are running we should be logging the errors and not panicking
 * allow use to disable hot-reloading
 * make refresh time configurable
