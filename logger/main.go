@@ -64,7 +64,7 @@ func (l *Logger) Initialize() {
 		With().
 		Timestamp().
 		Logger()
-	// TODO: This doesn't work - it's setting log to a knew memory location
+	// TODO: This doesn't work - it's setting log to a new memory location
 	//   instead of putting the new zerlog into the existing memory location
 	log = &tempLog
 }
