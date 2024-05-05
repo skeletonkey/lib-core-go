@@ -1,4 +1,5 @@
 # lib-core-go
+
 Core libraries for running a service
 
 ## config
@@ -14,6 +15,7 @@ The config file should be a JSON object with the top level keys being used as id
 #### Example
 
 JSON:
+
 ```json
 {
   "app": {
@@ -25,11 +27,12 @@ JSON:
 ```
 
 Go Code:
+
 ```go
 type app struct {
     Name    string `json:"name"`
-	Ver     int    `json:"version"`
-	Enabled bool `json:"enabled"`
+    Ver     int    `json:"version"`
+    Enabled bool `json:"enabled"`
 }
 
 func main() {
@@ -53,12 +56,12 @@ Hot Reloading things to know:
   * this is not editable
   * you cannot disable this behavior
 * changing configs for objects that utilize an Initializer doesn't have the desired effect
-    * recommend not changing these settings
-        * if changes are made, restart the service
+  * recommend not changing these settings
+    * if changes are made, restart the service
     * bug report (entry in the TODO file) has been submitted
 * if the config is messed up (like breaking the JSON) it will cause the program to panic
-    * recommended not to use an editor that auto saves without linting
-    * bug report has been submitted
+  * recommended not to use an editor that auto saves without linting
+  * bug report has been submitted
 
 ## logger
 
