@@ -6,7 +6,7 @@ Core libraries for running a service
 
 Configuration library that reads from a JSON file and supports 'hot reloading.'
 
-Location of the project's config JSON file is currently in the environmental variable `RACHIO_CONFIG_FILE`.
+Location of the project's config JSON file is currently in the environmental variable `PROJECT_CONFIG_FILE`.
 
 ### JSON config file
 

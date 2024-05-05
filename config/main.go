@@ -26,7 +26,7 @@ type config struct {
 	initializers initMapType    // initialization functions that some modules may need
 }
 
-const configFileString = "RACHIO_CONFIG_FILE"
+const configFileString = "PROJECT_CONFIG_FILE"
 
 var cfg *config
 
