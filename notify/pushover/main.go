@@ -11,18 +11,19 @@ import (
 )
 
 // Notify sends `msg` using the Pushover API
-func Notify(msg string) {
+func Notify(msg string) error {
 	config := getConfig()
 	log := logger.Get()
 	requestUrl := fmt.Sprintf("%s/messages.json?token=%s&user=%s&message=%s",
 		config.URL, config.Token.Application, config.Token.Account, url.QueryEscape(msg))
-	log.Debug().Str("URL", requestUrl).Msg("notification URL")
+	log.Trace().Str("URL", requestUrl).Msg("notification URL")
 	if !config.Enabled {
 		log.Info().Msg("Pushover is disabled")
 	} else {
 		res, err := http.Post(requestUrl, "application/json", nil)
 		if err != nil {
-			log.Panic().Err(err).Str("URL", requestUrl).Msg("unable to post to url")
+			log.Debug().Err(err).Str("URL", requestUrl).Msg("unable to post to url")
+			return err
 		}
 		body, err := io.ReadAll(res.Body)
 		defer func() {
@@ -34,12 +35,16 @@ func Notify(msg string) {
 			}
 		}()
 		if err != nil {
-			log.Panic().Err(err).Interface("response", res).Msg("unable to read response body")
+			log.Debug().Err(err).Interface("response", res).Msg("unable to read response body")
+			return err
 		}
 		if res.StatusCode != 200 {
-			log.Panic().Int("Status Code", res.StatusCode).Bytes("response body", body).Msg("non-200 response received")
+			log.Debug().Int("Status Code", res.StatusCode).Bytes("response body", body).Msg("non-200 response received")
+			return err
 		}
 
-		log.Info().Bytes("response body", body).Msg("pushover response")
+		log.Trace().Bytes("response body", body).Msg("pushover response")
 	}
+
+	return nil
 }
