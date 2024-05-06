@@ -82,3 +82,22 @@ To use properly ensure that the following exists in the application's config:
   }
 }
 ```
+
+## notify
+
+### pushover
+
+Use pushover.net's API to send messages to your phone's Pushover App.
+
+This relies on config and logger modules.
+
+```json
+  "pushover": {
+    "enabled": true,
+    "url": "https://api.pushover.net/1",
+    "token": {
+      "account": "ACCOUNT TOKEN GOES HERE (YOUR USER KEY)",
+      "application": "APPLICATION TOKEN GOES HERE"
+    }
+  }
+```
