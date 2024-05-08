@@ -1,11 +1,12 @@
 # lib-core-go
+
 Core libraries for running a service
 
 ## config
 
 Configuration library that reads from a JSON file and supports 'hot reloading.'
 
-Location of the project's config JSON file is currently in the environmental variable `RACHIO_CONFIG_FILE`.
+Location of the project's config JSON file is currently in the environmental variable `PROJECT_CONFIG_FILE`.
 
 ### JSON config file
 
@@ -14,6 +15,7 @@ The config file should be a JSON object with the top level keys being used as id
 #### Example
 
 JSON:
+
 ```json
 {
   "app": {
@@ -25,11 +27,12 @@ JSON:
 ```
 
 Go Code:
+
 ```go
 type app struct {
     Name    string `json:"name"`
-	Ver     int    `json:"version"`
-	Enabled bool `json:"enabled"`
+    Ver     int    `json:"version"`
+    Enabled bool `json:"enabled"`
 }
 
 func main() {
@@ -53,12 +56,12 @@ Hot Reloading things to know:
   * this is not editable
   * you cannot disable this behavior
 * changing configs for objects that utilize an Initializer doesn't have the desired effect
-    * recommend not changing these settings
-        * if changes are made, restart the service
+  * recommend not changing these settings
+    * if changes are made, restart the service
     * bug report (entry in the TODO file) has been submitted
 * if the config is messed up (like breaking the JSON) it will cause the program to panic
-    * recommended not to use an editor that auto saves without linting
-    * bug report has been submitted
+  * recommended not to use an editor that auto saves without linting
+  * bug report has been submitted
 
 ## logger
 
@@ -78,4 +81,23 @@ To use properly ensure that the following exists in the application's config:
     "to_stdout": false
   }
 }
+```
+
+## notify
+
+### pushover
+
+Use pushover.net's API to send messages to your phone's Pushover App.
+
+This relies on config and logger modules.
+
+```json
+  "pushover": {
+    "enabled": true,
+    "url": "https://api.pushover.net/1",
+    "token": {
+      "account": "ACCOUNT TOKEN GOES HERE (YOUR USER KEY)",
+      "application": "APPLICATION TOKEN GOES HERE"
+    }
+  }
 ```

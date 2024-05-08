@@ -26,7 +26,7 @@ type config struct {
 	initializers initMapType    // initialization functions that some modules may need
 }
 
-const configFileString = "RACHIO_CONFIG_FILE"
+const configFileString = "PROJECT_CONFIG_FILE"
 
 var cfg *config
 
@@ -119,7 +119,7 @@ var once sync.Once
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.
 //
-// Thie function also sets up a check of the config file for any modifications. If changes are detected the config will be
+// This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
 func LoadConfig(name string, configStruct interface{}) {
 	cfg = getConfig()
