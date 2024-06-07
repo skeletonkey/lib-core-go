@@ -28,7 +28,7 @@ JSON:
 
 Go Code:
 
-```go
+```
 type app struct {
     Name    string `json:"name"`
     Ver     int    `json:"version"`
@@ -59,7 +59,7 @@ Hot Reloading things to know:
   * recommend not changing these settings
     * if changes are made, restart the service
     * bug report (entry in the TODO file) has been submitted
-* if the config is messed up (like breaking the JSON) it will cause the program to panic
+* if the config is messed up (like breaking the JSON), it will cause the program to panic
   * recommended not to use an editor that auto saves without linting
   * bug report has been submitted
 
@@ -91,7 +91,7 @@ Use pushover.net's API to send messages to your phone's Pushover App.
 
 This relies on config and logger modules.
 
-```json
+```
   "pushover": {
     "enabled": true,
     "url": "https://api.pushover.net/1",
