@@ -106,8 +106,8 @@ func load() {
 			}
 		}
 
-		if _, ok := cfg.initializers[key]; ok {
-			cfg.initializers[key].Initialize()
+		if _, ok := cfg.configPtrs[key].(Initializer); ok {
+			cfg.configPtrs[key].(Initializer).Initialize()
 		}
 	}
 }
