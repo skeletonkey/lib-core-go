@@ -64,8 +64,8 @@ func getConfig() *config {
 	return cfg
 }
 
-// This method is usually called first and the application can not run without this information.  Since any errors
-// encountered here are fatal, panic is used instead of any type of error return or logging.
+// This method is usually called first, and the application cannot run without this information.
+// Since any errors encountered here are fatal, panic is used instead of any type of error return or logging.
 func load() {
 	lock.Lock()
 	defer func() {
@@ -119,8 +119,9 @@ var once sync.Once
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.
 //
-// This function also sets up a check of the config file for any modifications. If changes are detected the config will be
-// reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
+// This function also sets up a check of the config file for any modifications.
+// If changes are detected, the config will be reloaded.
+// Any errors encountered during parsing of the config will terminate the program.
 func LoadConfig(name string, configStruct interface{}) {
 	cfg = getConfig()
 	once.Do(func() {
