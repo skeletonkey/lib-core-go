@@ -81,3 +81,11 @@ func Get() *zerolog.Logger {
 	})
 	return log
 }
+
+// HandleErr is a helper function to log errors but do nothing else. Should be used in places were errors are being ignored.
+func HandleErr(err error, msg string) {
+	if err != nil {
+		log := Get()
+		log.Error().Err(err).Msg(msg)
+	}
+}
