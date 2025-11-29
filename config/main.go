@@ -1,4 +1,8 @@
-// Package config provides configuration injection with hot reloads.
+/* Package config provides configuration injection with hot reloads.
+
+The configuration hot reloading requires that a pointer is returned to the underlying configuration. This allows for altering the configuration however, that should be avoided as the hot reload will overwrite any local changes. Please treat the returned configuration variable as immutable.
+*/
+
 package config
 
 import (
@@ -30,8 +34,14 @@ type (
 
 const configFileString = "PROJECT_CONFIG_FILE"
 
-var cfg *config
+//nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
+var (
+	cfg  *config
+	lock = &sync.Mutex{}
+	once sync.Once
+)
 
+//nolint:gochecknoinits // cfg is a singleton of configs; this ensures that it is initialized properly
 func init() {
 	cfg = &config{}
 
@@ -54,8 +64,6 @@ func (c config) getConfigFile() string {
 	}
 	return c.configFile
 }
-
-var lock = &sync.Mutex{}
 
 // getConfig returns the internal cfg object (loading it if needed)
 func getConfig() *config {
@@ -116,7 +124,6 @@ func load() {
 
 // TODO: make this configurable
 const checkInterval = 15 // seconds
-var once sync.Once
 
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.

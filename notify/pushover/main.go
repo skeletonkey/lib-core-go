@@ -25,7 +25,6 @@ func Notify(ctx context.Context, msg string) (err error) {
 		return nil
 	}
 
-	//nolint: gosec // URL constructed from config values - assumed to be safe
 	res, err := http.NewRequestWithContext(ctx, "POST", requestUrl, nil)
 	if err != nil {
 		log.Debug().Err(err).Str("URL", requestUrl).Msg("unable to post to url")

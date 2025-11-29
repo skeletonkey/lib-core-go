@@ -14,10 +14,12 @@ import (
 	"github.com/skeletonkey/lib-core-go/config"
 )
 
+//nolint:gochecknoglobals // variables to coordinate the logger singleton
 var (
 	log    *zerolog.Logger
 	logCfg *Logger
 	lock   = &sync.Mutex{}
+	once   sync.Once
 )
 
 // Initialize uses the configuration info in the Logger struct to set up the rs/zerolog instance
@@ -70,8 +72,6 @@ func (l *Logger) Initialize() {
 	//   instead of putting the new zerlog into the existing memory location
 	log = &tempLog
 }
-
-var once sync.Once
 
 // Get a reference to the zerolog.Logger with the appropriate configured settings.
 func Get() *zerolog.Logger {
