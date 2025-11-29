@@ -2,6 +2,7 @@
 package pushover
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,7 +12,8 @@ import (
 )
 
 // Notify sends `msg` using the Pushover API
-func Notify(msg string) (err error) {
+// Not timeout is set for the context - the caller should set one if desired
+func Notify(ctx context.Context, msg string) (err error) {
 	config := getConfig()
 	log := logger.Get()
 	requestUrl := fmt.Sprintf("%s/messages.json?token=%s&user=%s&message=%s",
@@ -23,26 +25,20 @@ func Notify(msg string) (err error) {
 		return nil
 	}
 
-	res, err := http.Post(requestUrl, "application/json", nil)
+	//nolint: gosec // URL constructed from config values - assumed to be safe
+	res, err := http.NewRequestWithContext(ctx, "POST", requestUrl, nil)
 	if err != nil {
 		log.Debug().Err(err).Str("URL", requestUrl).Msg("unable to post to url")
 		return err
 	}
 	body, err := io.ReadAll(res.Body)
-	defer func() {
-		err = res.Body.Close()
-		if err != nil {
-			log.Error().
-				Err(err).
-				Msg("unable to close response body")
-		}
-	}()
+	defer func() { logger.HandleErr(res.Body.Close(), "unable to close response body") }()
 	if err != nil {
 		log.Debug().Err(err).Interface("response", res).Msg("unable to read response body")
 		return err
 	}
-	if res.StatusCode != 200 {
-		log.Debug().Int("Status Code", res.StatusCode).Bytes("response body", body).Msg("non-200 response received")
+	if res.Response.StatusCode != 200 {
+		log.Debug().Int("Status Code", res.Response.StatusCode).Bytes("response body", body).Msg("non-200 response received")
 		return err
 	}
 
