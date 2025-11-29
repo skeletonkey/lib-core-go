@@ -1,6 +1,6 @@
 module github.com/skeletonkey/lib-core-go
 
-go 1.22
+go 1.24.5
 
 require (
 	github.com/natefinch/lumberjack v2.0.0+incompatible
