@@ -14,17 +14,19 @@ type Initializer interface {
 	Initialize()
 }
 
-type configMapType map[string][]byte
-type configPtrsType map[string]any
-type initMapType map[string]Initializer
-type config struct {
-	configFile   string         // location of the config json file
-	configs      configMapType  // map containing json representation of each top level key
-	configPtrs   configPtrsType // map of pointers to existing config objects
-	lastLoad     time.Time      // time of last config load
-	reload       bool           // set to true if config file needs to be reloaded
-	initializers initMapType    // initialization functions that some modules may need
-}
+type (
+	configMapType  map[string][]byte
+	configPtrsType map[string]any
+	initMapType    map[string]Initializer
+	config         struct {
+		lastLoad     time.Time
+		configs      configMapType
+		configPtrs   configPtrsType
+		initializers initMapType
+		configFile   string
+		reload       bool
+	}
+)
 
 const configFileString = "PROJECT_CONFIG_FILE"
 

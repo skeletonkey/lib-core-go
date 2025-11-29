@@ -14,9 +14,11 @@ import (
 	"github.com/skeletonkey/lib-core-go/config"
 )
 
-var log *zerolog.Logger
-var logCfg *Logger
-var lock = &sync.Mutex{}
+var (
+	log    *zerolog.Logger
+	logCfg *Logger
+	lock   = &sync.Mutex{}
+)
 
 // Initialize uses the configuration info in the Logger struct to set up the rs/zerolog instance
 func (l *Logger) Initialize() {
