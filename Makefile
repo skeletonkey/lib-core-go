@@ -8,7 +8,6 @@ help:
 	@echo "  make fmt           - Format code"
 	@echo "  make vet           - Run go vet"
 	@echo "  make lint          - Run linter"
-	@echo "  make deps-update   - Update dependencies"
 	@echo "  make install-tools - Install development tools"
 
 fmt:
@@ -22,12 +21,6 @@ vet:
 lint: fmt vet
 	@echo "Running linter..."
 	golangci-lint run --fix
-
-deps-update:
-	@echo "Updating dependencies..."
-	go get -u github.com/natefinch/lumberjack@latest
-	go get -u github.com/rs/zerolog@latest
-	go mod tidy
 
 tools-install:
 	@echo "Installing development tools..."
