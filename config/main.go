@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,9 +40,10 @@ const configFileString = "PROJECT_CONFIG_FILE"
 var (
 	cfg               *config
 	lock              = &sync.Mutex{}
-	once              sync.Once
+	hotReloadStart    sync.Once
+	hotReloadStopOnce sync.Once
 	hotReloadStop     chan struct{}
-	hotReloadDisabled bool
+	hotReloadDisabled atomic.Bool
 )
 
 //nolint:gochecknoinits // cfg is a singleton of configs; this ensures that it is initialized properly
@@ -130,18 +132,24 @@ const checkInterval = 15 // seconds
 // DisableHotReload prevents the config file from being watched for changes.
 // If called before LoadConfig, the watcher goroutine is never started.
 // If called after, the existing watcher is stopped.
+// Safe to call multiple times.
 func DisableHotReload() {
-	hotReloadDisabled = true
-	if hotReloadStop != nil {
-		close(hotReloadStop)
-	}
+	hotReloadDisabled.Store(true)
+	hotReloadStopOnce.Do(func() {
+		if hotReloadStop != nil {
+			close(hotReloadStop)
+		}
+	})
 }
 
 func startHotReload() {
-	if hotReloadDisabled {
+	if hotReloadDisabled.Load() {
 		return
 	}
-	once.Do(func() {
+	hotReloadStart.Do(func() {
+		if hotReloadDisabled.Load() {
+			return
+		}
 		hotReloadStop = make(chan struct{})
 		ticker := time.NewTicker(checkInterval * time.Second)
 		go func() {
