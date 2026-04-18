@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,14 +24,12 @@ type Initializer interface {
 type (
 	configMapType  map[string][]byte
 	configPtrsType map[string]any
-	initMapType    map[string]Initializer
 	config         struct {
-		lastLoad     time.Time
-		configs      configMapType
-		configPtrs   configPtrsType
-		initializers initMapType
-		configFile   string
-		initialLoad  bool
+		lastLoad    time.Time
+		configs     configMapType
+		configPtrs  configPtrsType
+		configFile  string
+		initialLoad bool
 	}
 )
 
@@ -52,7 +51,6 @@ func init() {
 
 	cfg.configs = make(configMapType)
 	cfg.configPtrs = make(configPtrsType)
-	cfg.initializers = make(initMapType)
 	cfg.lastLoad = time.Now()
 	cfg.initialLoad = true
 }
@@ -68,6 +66,19 @@ func (c config) getConfigFile() string {
 		}
 	}
 	return c.configFile
+}
+
+func initializeIfSupported(v any) {
+	val := reflect.ValueOf(v)
+	for val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
+		if !val.IsNil() {
+			if init, ok := val.Interface().(Initializer); ok {
+				init.Initialize()
+				return
+			}
+		}
+		val = val.Elem()
+	}
 }
 
 // getConfig returns the internal cfg object (loading it if needed)
@@ -110,18 +121,18 @@ func load() error {
 			return fmt.Errorf("unable to marshal key (%s) data: %s", key, err)
 		}
 
-		if _, ok := cfg.configPtrs[key]; !ok {
+		ptr, registered := cfg.configPtrs[key]
+		if !registered {
 			cfg.configs[key] = valueJson
-		} else {
-			err := json.Unmarshal(valueJson, cfg.configPtrs[key])
-			if err != nil {
-				return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
-			}
+			continue
 		}
 
-		if _, ok := cfg.initializers[key]; ok {
-			cfg.initializers[key].Initialize()
+		err = json.Unmarshal(valueJson, ptr)
+		if err != nil {
+			return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
 		}
+
+		initializeIfSupported(ptr)
 	}
 
 	return nil
@@ -178,6 +189,9 @@ func startHotReload() {
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.
 //
+// If the config struct implements the Initializer interface, Initialize() is called automatically
+// after the first load and again on each hot reload.
+//
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during a reload are logged and the previous configuration is retained.
 // Hot reloading can be disabled by calling DisableHotReload.
@@ -198,13 +212,6 @@ func LoadConfig(name string, configStruct any) {
 			panic(fmt.Errorf("unable to unmarshal (%s) to struct: %s", configData, err))
 		}
 		cfg.configPtrs[name] = &configStruct
+		initializeIfSupported(configStruct)
 	}
-}
-
-// RegisterInitializer 'registers' the struct as being able to be initialized and runs that routine.
-//
-//	TODO: this should be replaced as this should be done programmatically
-func RegisterInitializer(name string, initFunc Initializer) {
-	cfg.initializers[name] = initFunc
-	initFunc.Initialize()
 }
