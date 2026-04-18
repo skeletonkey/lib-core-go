@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -119,6 +120,9 @@ var once sync.Once
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.
 //
+// If the config struct implements the Initializer interface, Initialize() is called automatically
+// after the first load and again on each hot reload. No separate registration step is needed.
+//
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
 func LoadConfig(name string, configStruct interface{}) {
@@ -151,13 +155,13 @@ func LoadConfig(name string, configStruct interface{}) {
 			panic(fmt.Errorf("unable to unmarshal (%s) to struct: %s", configData, err))
 		}
 		cfg.configPtrs[name] = &configStruct
-	}
-}
 
-// RegisterInitializer 'registers' the struct as being able to be initialized and runs that routine.
-//
-//	TODO: this should be replaced as this should be done programmatically
-func RegisterInitializer(name string, initFunc Initializer) {
-	cfg.initializers[name] = initFunc
-	initFunc.Initialize()
+		val := reflect.ValueOf(configStruct)
+		if val.Kind() == reflect.Ptr && !val.IsNil() {
+			if init, ok := val.Elem().Interface().(Initializer); ok {
+				cfg.initializers[name] = init
+				init.Initialize()
+			}
+		}
+	}
 }
