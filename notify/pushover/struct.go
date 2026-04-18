@@ -9,16 +9,16 @@ type token struct {
 	Application string `json:"application"`
 }
 
-// ErrDisabled is returned by Notify when pushover is disabled in the configuration.
+// DisabledError is returned by Notify when pushover is disabled in the configuration.
 // Callers can check for this error to distinguish a disabled notification from a real failure:
 //
 //	err := pushover.Notify(ctx, "hello")
-//	if errors.As(err, &pushover.ErrDisabled{}) {
+//	if errors.As(err, &pushover.DisabledError{}) {
 //	    // pushover is disabled, not an actual error
 //	}
-type ErrDisabled struct{}
+type DisabledError struct{}
 
-func (e ErrDisabled) Error() string {
+func (e DisabledError) Error() string {
 	return "pushover is disabled"
 }
 

@@ -94,7 +94,7 @@ func load() {
 		panic(fmt.Errorf("invalid JSON found in file (%s)", cfg.getConfigFile()))
 	}
 
-	data := map[string]interface{}{}
+	data := map[string]any{}
 	err = json.Unmarshal(rawData, &data)
 	if err != nil {
 		panic(fmt.Errorf("unable to unmarshal config file (%s): %s", cfg.getConfigFile(), err))
@@ -130,7 +130,7 @@ const checkInterval = 15 // seconds
 //
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
-func LoadConfig(name string, configStruct interface{}) {
+func LoadConfig(name string, configStruct any) {
 	cfg = getConfig()
 	once.Do(func() {
 		ticker := time.NewTicker(checkInterval * time.Second)
