@@ -29,7 +29,7 @@ type (
 		configPtrs   configPtrsType
 		initializers initMapType
 		configFile   string
-		reload       bool
+		initialLoad  bool
 	}
 )
 
@@ -50,7 +50,7 @@ func init() {
 	cfg.configPtrs = make(configPtrsType)
 	cfg.initializers = make(initMapType)
 	cfg.lastLoad = time.Now()
-	cfg.reload = true
+	cfg.initialLoad = true
 }
 
 // getConfigFile returns the full path and filename of the configuration file
@@ -68,10 +68,11 @@ func (c config) getConfigFile() string {
 
 // getConfig returns the internal cfg object (loading it if needed)
 func getConfig() *config {
-	if cfg.reload {
+	if cfg.initialLoad {
 		if err := load(); err != nil {
 			panic(err)
 		}
+		cfg.initialLoad = false
 	}
 
 	return cfg
@@ -118,8 +119,6 @@ func load() error {
 			cfg.initializers[key].Initialize()
 		}
 	}
-
-	cfg.reload = false
 
 	return nil
 }
