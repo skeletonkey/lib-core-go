@@ -25,20 +25,25 @@ func Notify(ctx context.Context, msg string) (err error) {
 		return nil
 	}
 
-	res, err := http.NewRequestWithContext(ctx, "POST", requestUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", requestUrl, nil)
+	if err != nil {
+		log.Debug().Err(err).Str("URL", requestUrl).Msg("unable to create request")
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Debug().Err(err).Str("URL", requestUrl).Msg("unable to post to url")
 		return err
 	}
-	body, err := io.ReadAll(res.Body)
 	defer func() { logger.HandleErr(res.Body.Close(), "unable to close response body") }()
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Debug().Err(err).Interface("response", res).Msg("unable to read response body")
 		return err
 	}
-	if res.Response.StatusCode != 200 {
-		log.Debug().Int("Status Code", res.Response.StatusCode).Bytes("response body", body).Msg("non-200 response received")
-		return err
+	if res.StatusCode != 200 {
+		log.Debug().Int("Status Code", res.StatusCode).Bytes("response body", body).Msg("non-200 response received")
+		return fmt.Errorf("non-200 response from pushover: %d", res.StatusCode)
 	}
 
 	log.Trace().Bytes("response body", body).Msg("pushover response")
