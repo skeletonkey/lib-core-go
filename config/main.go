@@ -53,6 +53,15 @@ func (c config) getConfigFile() string {
 
 var lock = &sync.Mutex{}
 
+func initializeIfSupported(v any) {
+	val := reflect.ValueOf(v)
+	if val.Kind() == reflect.Ptr && !val.IsNil() {
+		if init, ok := val.Elem().Interface().(Initializer); ok {
+			init.Initialize()
+		}
+	}
+}
+
 // getConfig returns the internal cfg object (loading it if needed)
 func getConfig() *config {
 	if cfg.reload {
@@ -105,12 +114,7 @@ func load() {
 			panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
 		}
 
-		val := reflect.ValueOf(ptr)
-		if val.Kind() == reflect.Ptr && !val.IsNil() {
-			if init, ok := val.Elem().Interface().(Initializer); ok {
-				init.Initialize()
-			}
-		}
+		initializeIfSupported(ptr)
 	}
 }
 
@@ -156,12 +160,6 @@ func LoadConfig(name string, configStruct interface{}) {
 			panic(fmt.Errorf("unable to unmarshal (%s) to struct: %s", configData, err))
 		}
 		cfg.configPtrs[name] = &configStruct
-
-		val := reflect.ValueOf(configStruct)
-		if val.Kind() == reflect.Ptr && !val.IsNil() {
-			if init, ok := val.Elem().Interface().(Initializer); ok {
-				init.Initialize()
-			}
-		}
+		initializeIfSupported(configStruct)
 	}
 }
