@@ -15,10 +15,8 @@ import (
 
 //nolint:gochecknoglobals // variables to coordinate the logger singleton
 var (
-	log    *zerolog.Logger
-	logCfg *Logger
-	lock   = &sync.Mutex{}
-	once   sync.Once
+	log  *zerolog.Logger
+	lock = &sync.Mutex{}
 )
 
 // Initialize uses the configuration info in the Logger struct to set up the rs/zerolog instance

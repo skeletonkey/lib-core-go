@@ -24,14 +24,12 @@ type Initializer interface {
 type (
 	configMapType  map[string][]byte
 	configPtrsType map[string]any
-	initMapType    map[string]Initializer
 	config         struct {
-		lastLoad     time.Time
-		configs      configMapType
-		configPtrs   configPtrsType
-		initializers initMapType
-		configFile   string
-		initialLoad  bool
+		lastLoad    time.Time
+		configs     configMapType
+		configPtrs  configPtrsType
+		configFile  string
+		initialLoad bool
 	}
 )
 
@@ -69,8 +67,6 @@ func (c config) getConfigFile() string {
 	}
 	return c.configFile
 }
-
-var lock = &sync.Mutex{}
 
 func initializeIfSupported(v any) {
 	val := reflect.ValueOf(v)
@@ -129,16 +125,11 @@ func load() error {
 		if !registered {
 			cfg.configs[key] = valueJson
 			continue
-		} else {
-			err := json.Unmarshal(valueJson, cfg.configPtrs[key])
-			if err != nil {
-				return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
-			}
 		}
 
 		err = json.Unmarshal(valueJson, ptr)
 		if err != nil {
-			panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
+			return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
 		}
 
 		initializeIfSupported(ptr)
