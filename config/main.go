@@ -17,14 +17,12 @@ type Initializer interface {
 
 type configMapType map[string][]byte
 type configPtrsType map[string]any
-type initMapType map[string]Initializer
 type config struct {
-	configFile   string         // location of the config json file
-	configs      configMapType  // map containing json representation of each top level key
-	configPtrs   configPtrsType // map of pointers to existing config objects
-	lastLoad     time.Time      // time of last config load
-	reload       bool           // set to true if config file needs to be reloaded
-	initializers initMapType    // initialization functions that some modules may need
+	configFile string         // location of the config json file
+	configs    configMapType  // map containing json representation of each top level key
+	configPtrs configPtrsType // map of pointers to existing config objects
+	lastLoad   time.Time      // time of last config load
+	reload     bool           // set to true if config file needs to be reloaded
 }
 
 const configFileString = "PROJECT_CONFIG_FILE"
@@ -36,7 +34,6 @@ func init() {
 
 	cfg.configs = make(configMapType)
 	cfg.configPtrs = make(configPtrsType)
-	cfg.initializers = make(initMapType)
 	cfg.lastLoad = time.Now()
 	cfg.reload = true
 }
@@ -97,18 +94,22 @@ func load() {
 			panic(fmt.Errorf("unable to marshal key (%s) data: %s", key, err))
 		}
 
-		if _, ok := cfg.configPtrs[key]; !ok {
+		ptr, registered := cfg.configPtrs[key]
+		if !registered {
 			cfg.configs[key] = valueJson
-		} else {
-			// using Unmarshal to take care of all the reflection work
-			err := json.Unmarshal(valueJson, cfg.configPtrs[key])
-			if err != nil {
-				panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
-			}
+			continue
 		}
 
-		if _, ok := cfg.initializers[key]; ok {
-			cfg.initializers[key].Initialize()
+		err = json.Unmarshal(valueJson, ptr)
+		if err != nil {
+			panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
+		}
+
+		val := reflect.ValueOf(ptr)
+		if val.Kind() == reflect.Ptr && !val.IsNil() {
+			if init, ok := val.Elem().Interface().(Initializer); ok {
+				init.Initialize()
+			}
 		}
 	}
 }
@@ -121,7 +122,7 @@ var once sync.Once
 // reference to a struct that will be populated with the config data.
 //
 // If the config struct implements the Initializer interface, Initialize() is called automatically
-// after the first load and again on each hot reload. No separate registration step is needed.
+// after the first load and again on each hot reload.
 //
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
@@ -159,7 +160,6 @@ func LoadConfig(name string, configStruct interface{}) {
 		val := reflect.ValueOf(configStruct)
 		if val.Kind() == reflect.Ptr && !val.IsNil() {
 			if init, ok := val.Elem().Interface().(Initializer); ok {
-				cfg.initializers[name] = init
 				init.Initialize()
 			}
 		}
