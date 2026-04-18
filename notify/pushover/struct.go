@@ -9,6 +9,19 @@ type token struct {
 	Application string `json:"application"`
 }
 
+// ErrDisabled is returned by Notify when pushover is disabled in the configuration.
+// Callers can check for this error to distinguish a disabled notification from a real failure:
+//
+//	err := pushover.Notify(ctx, "hello")
+//	if errors.As(err, &pushover.ErrDisabled{}) {
+//	    // pushover is disabled, not an actual error
+//	}
+type ErrDisabled struct{}
+
+func (e ErrDisabled) Error() string {
+	return "pushover is disabled"
+}
+
 // Setting for use of the Pushover API:
 //
 //	 Enabled: bool to dis(en)able calling the API

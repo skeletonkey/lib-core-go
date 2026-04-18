@@ -17,7 +17,7 @@ func Notify(ctx context.Context, msg string) (err error) {
 		config.URL, config.Token.Application, config.Token.Account, url.QueryEscape(msg))
 
 	if !config.Enabled {
-		return nil
+		return ErrDisabled{}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", requestUrl, nil)
