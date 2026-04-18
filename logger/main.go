@@ -13,8 +13,13 @@ import (
 	"github.com/rs/zerolog/pkgerrors"
 )
 
-var log *zerolog.Logger
-var lock = &sync.Mutex{}
+//nolint:gochecknoglobals // variables to coordinate the logger singleton
+var (
+	log    *zerolog.Logger
+	logCfg *Logger
+	lock   = &sync.Mutex{}
+	once   sync.Once
+)
 
 // Initialize uses the configuration info in the Logger struct to set up the rs/zerolog instance
 func (l *Logger) Initialize() {
@@ -71,4 +76,12 @@ func (l *Logger) Initialize() {
 func Get() *zerolog.Logger {
 	getConfig()
 	return log
+}
+
+// HandleErr is a helper function to log errors but do nothing else. Should be used in places were errors are being ignored.
+func HandleErr(err error, msg string) {
+	if err != nil {
+		log := Get()
+		log.Error().Err(err).Msg(msg)
+	}
 }
