@@ -8,6 +8,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -68,51 +69,48 @@ func (c config) getConfigFile() string {
 // getConfig returns the internal cfg object (loading it if needed)
 func getConfig() *config {
 	if cfg.reload {
-		load()
+		if err := load(); err != nil {
+			panic(err)
+		}
 	}
 
 	return cfg
 }
 
-// This method is usually called first and the application can not run without this information.  Since any errors
-// encountered here are fatal, panic is used instead of any type of error return or logging.
-func load() {
+func load() error {
 	lock.Lock()
 	defer func() {
 		cfg.lastLoad = time.Now()
-		cfg.reload = false
-
 		lock.Unlock()
 	}()
 
 	rawData, err := os.ReadFile(cfg.getConfigFile())
 	if err != nil {
-		panic(fmt.Errorf("unable to open config file (%s): %s", cfg.getConfigFile(), err))
+		return fmt.Errorf("unable to open config file (%s): %s", cfg.getConfigFile(), err)
 	}
 
 	if !json.Valid(rawData) {
-		panic(fmt.Errorf("invalid JSON found in file (%s)", cfg.getConfigFile()))
+		return fmt.Errorf("invalid JSON found in file (%s)", cfg.getConfigFile())
 	}
 
 	data := map[string]any{}
 	err = json.Unmarshal(rawData, &data)
 	if err != nil {
-		panic(fmt.Errorf("unable to unmarshal config file (%s): %s", cfg.getConfigFile(), err))
+		return fmt.Errorf("unable to unmarshal config file (%s): %s", cfg.getConfigFile(), err)
 	}
 
 	for key, value := range data {
 		valueJson, err := json.Marshal(value)
 		if err != nil {
-			panic(fmt.Errorf("unable to marshal key (%s) data: %s", key, err))
+			return fmt.Errorf("unable to marshal key (%s) data: %s", key, err)
 		}
 
 		if _, ok := cfg.configPtrs[key]; !ok {
 			cfg.configs[key] = valueJson
 		} else {
-			// using Unmarshal to take care of all the reflection work
 			err := json.Unmarshal(valueJson, cfg.configPtrs[key])
 			if err != nil {
-				panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
+				return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
 			}
 		}
 
@@ -120,6 +118,10 @@ func load() {
 			cfg.initializers[key].Initialize()
 		}
 	}
+
+	cfg.reload = false
+
+	return nil
 }
 
 // TODO: make this configurable
@@ -129,7 +131,7 @@ const checkInterval = 15 // seconds
 // reference to a struct that will be populated with the config data.
 //
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
-// reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
+// reloaded. Any errors encountered during a reload are logged and the previous configuration is retained.
 func LoadConfig(name string, configStruct any) {
 	cfg = getConfig()
 	once.Do(func() {
@@ -138,10 +140,13 @@ func LoadConfig(name string, configStruct any) {
 			for range ticker.C {
 				fileInfo, err := os.Stat(cfg.getConfigFile())
 				if err != nil {
-					panic(fmt.Errorf("unable state file (%s): %s", cfg.getConfigFile(), err))
+					log.Printf("config reload: unable to stat file (%s): %s", cfg.getConfigFile(), err)
+					continue
 				}
 				if fileInfo.ModTime().Sub(cfg.lastLoad) > 0 {
-					load()
+					if err := load(); err != nil {
+						log.Printf("config reload: %s", err)
+					}
 				}
 			}
 		}()
