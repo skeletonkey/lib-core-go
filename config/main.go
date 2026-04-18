@@ -55,10 +55,14 @@ var lock = &sync.Mutex{}
 
 func initializeIfSupported(v any) {
 	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Ptr && !val.IsNil() {
-		if init, ok := val.Elem().Interface().(Initializer); ok {
-			init.Initialize()
+	for val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
+		if !val.IsNil() {
+			if init, ok := val.Interface().(Initializer); ok {
+				init.Initialize()
+				return
+			}
 		}
+		val = val.Elem()
 	}
 }
 
