@@ -3,10 +3,12 @@ package pushover
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Notify sends `msg` using the Pushover API
@@ -29,12 +31,18 @@ func Notify(ctx context.Context, msg string) (err error) {
 		return err
 	}
 	defer func() { _ = res.Body.Close() }()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("non-200 response from pushover: %d", res.StatusCode)
+	if res.StatusCode/100 != 2 {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return fmt.Errorf("pushover API error (%d): unable to read response body", res.StatusCode)
+		}
+		var apiResp struct {
+			Errors []string `json:"errors"`
+		}
+		if err := json.Unmarshal(body, &apiResp); err == nil && len(apiResp.Errors) > 0 {
+			return fmt.Errorf("pushover API error (%d): %s", res.StatusCode, strings.Join(apiResp.Errors, "; "))
+		}
+		return fmt.Errorf("pushover API error (%d): unknown error", res.StatusCode)
 	}
 
 	return nil
