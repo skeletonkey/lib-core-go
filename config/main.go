@@ -37,9 +37,11 @@ const configFileString = "PROJECT_CONFIG_FILE"
 
 //nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
 var (
-	cfg  *config
-	lock = &sync.Mutex{}
-	once sync.Once
+	cfg               *config
+	lock              = &sync.Mutex{}
+	once              sync.Once
+	hotReloadStop     chan struct{}
+	hotReloadDisabled bool
 )
 
 //nolint:gochecknoinits // cfg is a singleton of configs; this ensures that it is initialized properly
@@ -123,33 +125,57 @@ func load() error {
 	return nil
 }
 
-// TODO: make this configurable
 const checkInterval = 15 // seconds
+
+// DisableHotReload prevents the config file from being watched for changes.
+// If called before LoadConfig, the watcher goroutine is never started.
+// If called after, the existing watcher is stopped.
+func DisableHotReload() {
+	hotReloadDisabled = true
+	if hotReloadStop != nil {
+		close(hotReloadStop)
+	}
+}
+
+func startHotReload() {
+	if hotReloadDisabled {
+		return
+	}
+	once.Do(func() {
+		hotReloadStop = make(chan struct{})
+		ticker := time.NewTicker(checkInterval * time.Second)
+		go func() {
+			for {
+				select {
+				case <-hotReloadStop:
+					ticker.Stop()
+					return
+				case <-ticker.C:
+					fileInfo, err := os.Stat(cfg.getConfigFile())
+					if err != nil {
+						log.Printf("config reload: unable to stat file (%s): %s", cfg.getConfigFile(), err)
+						continue
+					}
+					if fileInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+						if err := load(); err != nil {
+							log.Printf("config reload: %s", err)
+						}
+					}
+				}
+			}
+		}()
+	})
+}
 
 // LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
 // reference to a struct that will be populated with the config data.
 //
 // This function also sets up a check of the config file for any modifications. If changes are detected the config will be
 // reloaded. Any errors encountered during a reload are logged and the previous configuration is retained.
+// Hot reloading can be disabled by calling DisableHotReload.
 func LoadConfig(name string, configStruct any) {
 	cfg = getConfig()
-	once.Do(func() {
-		ticker := time.NewTicker(checkInterval * time.Second)
-		go func() {
-			for range ticker.C {
-				fileInfo, err := os.Stat(cfg.getConfigFile())
-				if err != nil {
-					log.Printf("config reload: unable to stat file (%s): %s", cfg.getConfigFile(), err)
-					continue
-				}
-				if fileInfo.ModTime().Sub(cfg.lastLoad) > 0 {
-					if err := load(); err != nil {
-						log.Printf("config reload: %s", err)
-					}
-				}
-			}
-		}()
-	})
+	startHotReload()
 
 	cfgPtr, ok := cfg.configPtrs[name]
 	if ok {
