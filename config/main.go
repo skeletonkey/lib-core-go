@@ -196,10 +196,7 @@ func loadEnvOverlay() error {
 
 func load() error {
 	lock.Lock()
-	defer func() {
-		cfg.lastLoad = time.Now()
-		lock.Unlock()
-	}()
+	defer lock.Unlock()
 
 	baseData, err := readJSONFile(cfg.baseFile)
 	if err != nil {
@@ -218,6 +215,7 @@ func load() error {
 		initializeIfSupported(ptr)
 	}
 
+	cfg.lastLoad = time.Now()
 	return nil
 }
 
