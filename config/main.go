@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,15 +27,22 @@ type (
 	configMapType  map[string][]byte
 	configPtrsType map[string]any
 	config         struct {
-		lastLoad    time.Time
-		configs     configMapType
-		configPtrs  configPtrsType
-		configFile  string
-		initialLoad bool
+		lastLoad       time.Time
+		configs        configMapType
+		configPtrs     configPtrsType
+		baseFile       string
+		envFile        string
+		envFileExisted bool
+		initialLoad    bool
 	}
 )
 
-const configFileString = "PROJECT_CONFIG_FILE"
+const (
+	configFileString   = "PROJECT_CONFIG_FILE"
+	configDirString    = "PROJECT_CONFIG_DIR"
+	configEnvVarString = "PROJECT_CONFIG_ENV_VAR"
+	pathSeparator      = ":"
+)
 
 //nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
 var (
@@ -53,19 +62,44 @@ func init() {
 	cfg.configPtrs = make(configPtrsType)
 	cfg.lastLoad = time.Now()
 	cfg.initialLoad = true
+	cfg.resolveConfigSources()
 }
 
-// getConfigFile returns the full path and filename of the configuration file
-func (c config) getConfigFile() string {
-	if c.configFile == "" {
-		// TODO: better way to get config file location
-		if filename := os.Getenv(configFileString); filename == "" {
-			panic(fmt.Errorf("env var %s is not set", configFileString))
-		} else {
-			c.configFile = filename
+func (c *config) resolveConfigSources() {
+	filename := os.Getenv(configFileString)
+	if filename == "" {
+		panic(fmt.Errorf("env var %s is not set", configFileString))
+	}
+
+	dirList := os.Getenv(configDirString)
+	if dirList == "" {
+		dirList = "."
+	}
+
+	for dir := range strings.SplitSeq(dirList, pathSeparator) {
+		candidate := filepath.Join(dir, filename)
+		if _, err := os.Stat(candidate); err == nil { //nolint:gosec // path from env var config
+			c.baseFile = candidate
+			break
 		}
 	}
-	return c.configFile
+
+	if c.baseFile == "" {
+		panic(fmt.Errorf("%s (%s) not found in directories: %s", configFileString, filename, dirList))
+	}
+
+	if envVarName := os.Getenv(configEnvVarString); envVarName != "" {
+		if env := os.Getenv(envVarName); env != "" {
+			ext := filepath.Ext(filename)
+			stem := strings.TrimSuffix(filename, ext)
+			envFilename := fmt.Sprintf("%s_%s%s", stem, env, ext)
+			c.envFile = filepath.Join(filepath.Dir(c.baseFile), envFilename)
+		}
+	}
+}
+
+func (c *config) getConfigFile() string {
+	return c.baseFile
 }
 
 func initializeIfSupported(v any) {
@@ -93,28 +127,25 @@ func getConfig() *config {
 	return cfg
 }
 
-func load() error {
-	lock.Lock()
-	defer func() {
-		cfg.lastLoad = time.Now()
-		lock.Unlock()
-	}()
-
-	rawData, err := os.ReadFile(cfg.getConfigFile())
+func readJSONFile(path string) (map[string]any, error) {
+	rawData, err := os.ReadFile(path) //nolint:gosec // path resolved from env var config
 	if err != nil {
-		return fmt.Errorf("unable to open config file (%s): %s", cfg.getConfigFile(), err)
+		return nil, fmt.Errorf("unable to open config file (%s): %s", path, err)
 	}
 
 	if !json.Valid(rawData) {
-		return fmt.Errorf("invalid JSON found in file (%s)", cfg.getConfigFile())
+		return nil, fmt.Errorf("invalid JSON found in file (%s)", path)
 	}
 
 	data := map[string]any{}
-	err = json.Unmarshal(rawData, &data)
-	if err != nil {
-		return fmt.Errorf("unable to unmarshal config file (%s): %s", cfg.getConfigFile(), err)
+	if err := json.Unmarshal(rawData, &data); err != nil {
+		return nil, fmt.Errorf("unable to unmarshal config file (%s): %s", path, err)
 	}
 
+	return data, nil
+}
+
+func processConfigData(data map[string]any) error {
 	for key, value := range data {
 		valueJson, err := json.Marshal(value)
 		if err != nil {
@@ -127,11 +158,55 @@ func load() error {
 			continue
 		}
 
-		err = json.Unmarshal(valueJson, ptr)
-		if err != nil {
+		if err = json.Unmarshal(valueJson, ptr); err != nil {
 			return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
 		}
+	}
 
+	return nil
+}
+
+func loadEnvOverlay() error {
+	if cfg.envFile == "" {
+		return nil
+	}
+
+	_, statErr := os.Stat(cfg.envFile)
+	cfg.envFileExisted = statErr == nil
+
+	if !cfg.envFileExisted {
+		return nil
+	}
+
+	envData, err := readJSONFile(cfg.envFile)
+	if err != nil {
+		return err
+	}
+
+	return processConfigData(envData)
+}
+
+func load() error {
+	lock.Lock()
+	defer func() {
+		cfg.lastLoad = time.Now()
+		lock.Unlock()
+	}()
+
+	baseData, err := readJSONFile(cfg.baseFile)
+	if err != nil {
+		return err
+	}
+
+	if err := processConfigData(baseData); err != nil {
+		return err
+	}
+
+	if err := loadEnvOverlay(); err != nil {
+		return err
+	}
+
+	for _, ptr := range cfg.configPtrs {
 		initializeIfSupported(ptr)
 	}
 
@@ -153,6 +228,33 @@ func DisableHotReload() {
 	})
 }
 
+func shouldReload() bool {
+	baseInfo, err := os.Stat(cfg.baseFile)
+	if err != nil {
+		log.Printf("config reload: unable to stat file (%s): %s", cfg.baseFile, err)
+		return false
+	}
+
+	if baseInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+		return true
+	}
+
+	if cfg.envFile != "" {
+		envInfo, err := os.Stat(cfg.envFile)
+		envExists := err == nil
+
+		if envExists && envInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+			return true
+		}
+
+		if envExists != cfg.envFileExisted {
+			return true
+		}
+	}
+
+	return false
+}
+
 func startHotReload() {
 	if hotReloadDisabled.Load() {
 		return
@@ -170,12 +272,7 @@ func startHotReload() {
 					ticker.Stop()
 					return
 				case <-ticker.C:
-					fileInfo, err := os.Stat(cfg.getConfigFile())
-					if err != nil {
-						log.Printf("config reload: unable to stat file (%s): %s", cfg.getConfigFile(), err)
-						continue
-					}
-					if fileInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+					if shouldReload() {
 						if err := load(); err != nil {
 							log.Printf("config reload: %s", err)
 						}
