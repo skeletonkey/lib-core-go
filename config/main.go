@@ -88,7 +88,7 @@ func (c *config) resolveConfigSources() {
 		dirList = "."
 	}
 
-	for dir := range strings.SplitSeq(dirList, pathSeparator) {
+	for _, dir := range strings.Split(dirList, pathSeparator) {
 		candidate := filepath.Join(dir, filename)
 		if _, err := os.Stat(candidate); err == nil { //nolint:gosec // path from env var config
 			c.baseFile = candidate
