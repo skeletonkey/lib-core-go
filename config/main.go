@@ -235,13 +235,18 @@ func DisableHotReload() {
 }
 
 func shouldReload() bool {
+	lock.Lock()
+	lastLoad := cfg.lastLoad
+	envFileExisted := cfg.envFileExisted
+	lock.Unlock()
+
 	baseInfo, err := os.Stat(cfg.baseFile)
 	if err != nil {
 		log.Printf("config reload: unable to stat file (%s): %s", cfg.baseFile, err)
 		return false
 	}
 
-	if baseInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+	if baseInfo.ModTime().Sub(lastLoad) > 0 {
 		return true
 	}
 
@@ -249,11 +254,11 @@ func shouldReload() bool {
 		envInfo, err := os.Stat(cfg.envFile)
 		envExists := err == nil
 
-		if envExists && envInfo.ModTime().Sub(cfg.lastLoad) > 0 {
+		if envExists && envInfo.ModTime().Sub(lastLoad) > 0 {
 			return true
 		}
 
-		if envExists != cfg.envFileExisted {
+		if envExists != envFileExisted {
 			return true
 		}
 	}
