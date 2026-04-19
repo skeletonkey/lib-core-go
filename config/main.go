@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,10 +39,12 @@ type (
 )
 
 const (
-	configFileString   = "PROJECT_CONFIG_FILE"
-	configDirString    = "PROJECT_CONFIG_DIR"
-	configEnvVarString = "PROJECT_CONFIG_ENV_VAR"
-	pathSeparator      = string(os.PathListSeparator)
+	configFileString          = "PROJECT_CONFIG_FILE"
+	configDirString           = "PROJECT_CONFIG_DIR"
+	configEnvVarString        = "PROJECT_CONFIG_ENV_VAR"
+	configCheckIntervalString = "PROJECT_CONFIG_CHECK_INTERVAL"
+	pathSeparator             = string(os.PathListSeparator)
+	defaultCheckInterval      = 15
 )
 
 //nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
@@ -52,6 +55,7 @@ var (
 	hotReloadStopOnce sync.Once
 	hotReloadStop     chan struct{}
 	hotReloadDisabled atomic.Bool
+	checkInterval     = defaultCheckInterval //nolint:gochecknoglobals // set once in init()
 )
 
 //nolint:gochecknoinits // cfg is a singleton of configs; this ensures that it is initialized properly
@@ -63,6 +67,14 @@ func init() {
 	cfg.lastLoad = time.Now()
 	cfg.initialLoad = true
 	cfg.resolveConfigSources()
+
+	if val := os.Getenv(configCheckIntervalString); val != "" {
+		parsed, err := strconv.Atoi(val)
+		if err != nil || parsed < 1 {
+			panic(fmt.Errorf("env var %s must be a positive integer, got: %s", configCheckIntervalString, val))
+		}
+		checkInterval = parsed
+	}
 }
 
 func (c *config) resolveConfigSources() {
@@ -209,8 +221,6 @@ func load() error {
 	return nil
 }
 
-const checkInterval = 15 // seconds
-
 // DisableHotReload prevents the config file from being watched for changes.
 // If called before LoadConfig, the watcher goroutine is never started.
 // If called after, the existing watcher is stopped.
@@ -260,7 +270,7 @@ func startHotReload() {
 			return
 		}
 		hotReloadStop = make(chan struct{})
-		ticker := time.NewTicker(checkInterval * time.Second)
+		ticker := time.NewTicker(time.Duration(checkInterval) * time.Second)
 		go func() {
 			for {
 				select {
