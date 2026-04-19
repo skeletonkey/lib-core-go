@@ -113,11 +113,12 @@ func (c *config) resolveConfigSources() {
 func initializeIfSupported(v any) {
 	val := reflect.ValueOf(v)
 	for val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
-		if !val.IsNil() {
-			if init, ok := val.Interface().(Initializer); ok {
-				init.Initialize()
-				return
-			}
+		if val.IsNil() {
+			return
+		}
+		if init, ok := val.Interface().(Initializer); ok {
+			init.Initialize()
+			return
 		}
 		val = val.Elem()
 	}
@@ -305,6 +306,9 @@ func LoadConfig(name string, configStruct any) {
 	cfg = getConfig()
 	startHotReload()
 
+	lock.Lock()
+	defer lock.Unlock()
+
 	cfgPtr, ok := cfg.configPtrs[name]
 	if ok {
 		configStruct = cfgPtr
@@ -313,11 +317,11 @@ func LoadConfig(name string, configStruct any) {
 		if !ok {
 			panic(fmt.Errorf("key (%s) not found in config file (%s)", name, cfg.baseFile))
 		}
-		err := json.Unmarshal(configData, &configStruct)
+		err := json.Unmarshal(configData, configStruct)
 		if err != nil {
 			panic(fmt.Errorf("unable to unmarshal (%s) to struct: %s", configData, err))
 		}
-		cfg.configPtrs[name] = &configStruct
+		cfg.configPtrs[name] = configStruct
 		initializeIfSupported(configStruct)
 	}
 }
