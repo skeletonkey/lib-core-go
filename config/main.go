@@ -41,7 +41,7 @@ const (
 	configFileString   = "PROJECT_CONFIG_FILE"
 	configDirString    = "PROJECT_CONFIG_DIR"
 	configEnvVarString = "PROJECT_CONFIG_ENV_VAR"
-	pathSeparator      = ":"
+	pathSeparator      = string(os.PathListSeparator)
 )
 
 //nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
@@ -96,10 +96,6 @@ func (c *config) resolveConfigSources() {
 			c.envFile = filepath.Join(filepath.Dir(c.baseFile), envFilename)
 		}
 	}
-}
-
-func (c *config) getConfigFile() string {
-	return c.baseFile
 }
 
 func initializeIfSupported(v any) {
@@ -302,7 +298,7 @@ func LoadConfig(name string, configStruct any) {
 	} else {
 		configData, ok := cfg.configs[name]
 		if !ok {
-			panic(fmt.Errorf("key (%s) not found in config file (%s)", name, cfg.getConfigFile()))
+			panic(fmt.Errorf("key (%s) not found in config file (%s)", name, cfg.baseFile))
 		}
 		err := json.Unmarshal(configData, &configStruct)
 		if err != nil {
