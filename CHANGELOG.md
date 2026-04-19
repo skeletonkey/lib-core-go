@@ -1,4 +1,6 @@
-# 1.0.0
+# CHANGELOG
+
+## 1.0.0
 
 - BREAKING CHANGE: `PROJECT_CONFIG_FILE` now expects a filename (not a full path); use `PROJECT_CONFIG_DIR` for directory
 - BREAKING CHANGE: pushover's Notify method now requires a context when being called
@@ -10,7 +12,7 @@
 - upgrade dependencies to latest versions
 - linting and other cleanup
 
-# 0.3.0
+## 0.3.0
 
 - constant RACHIO_CONFIG_FILE changed to PROJECT_CONFIG_FILE - note this is somewhat of a breaking change
 - update Go to 1.22

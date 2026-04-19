@@ -12,7 +12,7 @@ import (
 )
 
 // Notify sends `msg` using the Pushover API
-// Not timeout is set for the context - the caller should set one if desired
+// No timeout is set for the context - the caller should set one if desired
 func Notify(ctx context.Context, msg string) (err error) {
 	config := getConfig()
 	requestUrl := fmt.Sprintf("%s/messages.json?token=%s&user=%s&message=%s",

@@ -1,4 +1,4 @@
-.PHONY: all help fmt vet lint deps-update install-tools
+.PHONY: all help fmt vet lint tools-install
 
 all: help
 
@@ -8,7 +8,7 @@ help:
 	@echo "  make fmt           - Format code"
 	@echo "  make vet           - Run go vet"
 	@echo "  make lint          - Run linter"
-	@echo "  make install-tools - Install development tools"
+	@echo "  make tools-install - Install development tools"
 
 fmt:
 	@echo "Formatting code..."
