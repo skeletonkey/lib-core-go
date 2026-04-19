@@ -43,7 +43,7 @@ const (
 	configDirString           = "PROJECT_CONFIG_DIR"
 	configEnvVarString        = "PROJECT_CONFIG_ENV_VAR"
 	configCheckIntervalString = "PROJECT_CONFIG_CHECK_INTERVAL"
-	pathSeparator             = string(os.PathListSeparator)
+	pathSeparator             = ":"
 	defaultCheckInterval      = 15
 )
 
