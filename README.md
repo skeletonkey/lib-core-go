@@ -13,6 +13,7 @@ Configuration library that reads from JSON files and supports hot reloading with
 | `PROJECT_CONFIG_FILE` | Yes | — | Base config filename (e.g., `config.json`) |
 | `PROJECT_CONFIG_DIR` | No | `.` | Colon-separated list of directories to search for config files. First directory containing the base file wins. |
 | `PROJECT_CONFIG_ENV_VAR` | No | — | Name of the env var holding the environment name. Used to find the overlay file. |
+| `PROJECT_CONFIG_CHECK_INTERVAL` | No | `15` | Hot reload check interval in seconds. Must be a positive integer. |
 
 ### Environment Overlays
 
