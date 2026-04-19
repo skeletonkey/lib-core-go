@@ -13,7 +13,7 @@ import (
 
 // Notify sends `msg` using the Pushover API
 // No timeout is set for the context - the caller should set one if desired
-func Notify(ctx context.Context, msg string) (err error) {
+func Notify(ctx context.Context, msg string) error {
 	config := getConfig()
 	requestUrl := fmt.Sprintf("%s/messages.json?token=%s&user=%s&message=%s",
 		config.URL, config.Token.Application, config.Token.Account, url.QueryEscape(msg))
