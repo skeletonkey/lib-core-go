@@ -73,7 +73,12 @@ func (l *Logger) Initialize() {
 // Get a reference to the zerolog.Logger with the appropriate configured settings.
 func Get() *zerolog.Logger {
 	getConfig()
-	return log
+
+	lock.Lock()
+	currentLog := log
+	lock.Unlock()
+
+	return currentLog
 }
 
 // HandleErr is a helper function to log errors but do nothing else. Should be used in places were errors are being ignored.
