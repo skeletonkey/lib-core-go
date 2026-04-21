@@ -1,11 +1,21 @@
-// Package config provides configuration injection with hot reloads.
+/* Package config provides configuration injection with hot reloads.
+
+The configuration hot reloading requires that a pointer is returned to the underlying configuration. This allows for altering the configuration however, that should be avoided as the hot reload will overwrite any local changes. Please treat the returned configuration variable as immutable.
+*/
+
 package config
 
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
+	"reflect"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,129 +24,290 @@ type Initializer interface {
 	Initialize()
 }
 
-type configMapType map[string][]byte
-type configPtrsType map[string]any
-type initMapType map[string]Initializer
-type config struct {
-	configFile   string         // location of the config json file
-	configs      configMapType  // map containing json representation of each top level key
-	configPtrs   configPtrsType // map of pointers to existing config objects
-	lastLoad     time.Time      // time of last config load
-	reload       bool           // set to true if config file needs to be reloaded
-	initializers initMapType    // initialization functions that some modules may need
-}
+type (
+	configMapType  map[string][]byte
+	configPtrsType map[string]any
+	config         struct {
+		lastLoad       time.Time
+		configs        configMapType
+		configPtrs     configPtrsType
+		baseFile       string
+		envFile        string
+		envFileExisted bool
+		initialLoad    bool
+	}
+)
 
-const configFileString = "PROJECT_CONFIG_FILE"
+const (
+	configFileString          = "PROJECT_CONFIG_FILE"
+	configDirString           = "PROJECT_CONFIG_DIR"
+	configEnvVarString        = "PROJECT_CONFIG_ENV_VAR"
+	configCheckIntervalString = "PROJECT_CONFIG_CHECK_INTERVAL"
+	pathSeparator             = ":"
+	defaultCheckInterval      = 15
+)
 
-var cfg *config
+//nolint:gochecknoglobals // cfg holds the configuration data, which should only be retrieved via getConfig()
+var (
+	cfg               *config
+	lock              = &sync.Mutex{}
+	hotReloadStart    sync.Once
+	hotReloadStopOnce sync.Once
+	hotReloadStop     chan struct{}
+	hotReloadDisabled atomic.Bool
+	checkInterval     = defaultCheckInterval //nolint:gochecknoglobals // set once in init()
+)
 
+//nolint:gochecknoinits // cfg is a singleton of configs; this ensures that it is initialized properly
 func init() {
 	cfg = &config{}
 
 	cfg.configs = make(configMapType)
 	cfg.configPtrs = make(configPtrsType)
-	cfg.initializers = make(initMapType)
 	cfg.lastLoad = time.Now()
-	cfg.reload = true
+	cfg.initialLoad = true
+	cfg.resolveConfigSources()
+
+	if val := os.Getenv(configCheckIntervalString); val != "" {
+		parsed, err := strconv.Atoi(val)
+		if err != nil || parsed < 1 {
+			panic(fmt.Errorf("env var %s must be a positive integer, got: %s", configCheckIntervalString, val))
+		}
+		checkInterval = parsed
+	}
 }
 
-// getConfigFile returns the full path and filename of the configuration file
-func (c config) getConfigFile() string {
-	if c.configFile == "" {
-		// TODO: better way to get config file location
-		if filename := os.Getenv(configFileString); filename == "" {
-			panic(fmt.Errorf("env var %s is not set", configFileString))
-		} else {
-			c.configFile = filename
+func (c *config) resolveConfigSources() {
+	filename := os.Getenv(configFileString)
+	if filename == "" {
+		panic(fmt.Errorf("env var %s is not set", configFileString))
+	}
+
+	dirList := os.Getenv(configDirString)
+	if dirList == "" {
+		dirList = "."
+	}
+
+	for _, dir := range strings.Split(dirList, pathSeparator) {
+		candidate := filepath.Join(dir, filename)
+		if _, err := os.Stat(candidate); err == nil { //nolint:gosec // path from env var config
+			c.baseFile = candidate
+			break
 		}
 	}
-	return c.configFile
+
+	if c.baseFile == "" {
+		panic(fmt.Errorf("%s (%s) not found in directories: %s", configFileString, filename, dirList))
+	}
+
+	if envVarName := os.Getenv(configEnvVarString); envVarName != "" {
+		if env := os.Getenv(envVarName); env != "" {
+			ext := filepath.Ext(filename)
+			stem := strings.TrimSuffix(filename, ext)
+			envFilename := fmt.Sprintf("%s_%s%s", stem, env, ext)
+			c.envFile = filepath.Join(filepath.Dir(c.baseFile), envFilename)
+		}
+	}
 }
 
-var lock = &sync.Mutex{}
+func initializeIfSupported(v any) {
+	val := reflect.ValueOf(v)
+	for val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
+		if val.IsNil() {
+			return
+		}
+		if init, ok := val.Interface().(Initializer); ok {
+			init.Initialize()
+			return
+		}
+		val = val.Elem()
+	}
+}
 
 // getConfig returns the internal cfg object (loading it if needed)
 func getConfig() *config {
-	if cfg.reload {
-		load()
+	if cfg.initialLoad {
+		if err := load(); err != nil {
+			panic(err)
+		}
+		cfg.initialLoad = false
 	}
 
 	return cfg
 }
 
-// This method is usually called first and the application can not run without this information.  Since any errors
-// encountered here are fatal, panic is used instead of any type of error return or logging.
-func load() {
-	lock.Lock()
-	defer func() {
-		cfg.lastLoad = time.Now()
-		cfg.reload = false
-
-		lock.Unlock()
-	}()
-
-	rawData, err := os.ReadFile(cfg.getConfigFile())
+func readJSONFile(path string) (map[string]any, error) {
+	rawData, err := os.ReadFile(path) //nolint:gosec // path resolved from env var config
 	if err != nil {
-		panic(fmt.Errorf("unable to open config file (%s): %s", cfg.getConfigFile(), err))
+		return nil, fmt.Errorf("unable to open config file (%s): %s", path, err)
 	}
 
 	if !json.Valid(rawData) {
-		panic(fmt.Errorf("invalid JSON found in file (%s)", cfg.getConfigFile()))
+		return nil, fmt.Errorf("invalid JSON found in file (%s)", path)
 	}
 
-	data := map[string]interface{}{}
-	err = json.Unmarshal(rawData, &data)
-	if err != nil {
-		panic(fmt.Errorf("unable to unmarshal config file (%s): %s", cfg.getConfigFile(), err))
+	data := map[string]any{}
+	if err := json.Unmarshal(rawData, &data); err != nil {
+		return nil, fmt.Errorf("unable to unmarshal config file (%s): %s", path, err)
 	}
 
+	return data, nil
+}
+
+func processConfigData(data map[string]any) error {
 	for key, value := range data {
 		valueJson, err := json.Marshal(value)
 		if err != nil {
-			panic(fmt.Errorf("unable to marshal key (%s) data: %s", key, err))
+			return fmt.Errorf("unable to marshal key (%s) data: %s", key, err)
 		}
 
-		if _, ok := cfg.configPtrs[key]; !ok {
+		ptr, registered := cfg.configPtrs[key]
+		if !registered {
 			cfg.configs[key] = valueJson
-		} else {
-			// using Unmarshal to take care of all the reflection work
-			err := json.Unmarshal(valueJson, cfg.configPtrs[key])
-			if err != nil {
-				panic(fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err))
-			}
+			continue
 		}
 
-		if _, ok := cfg.initializers[key]; ok {
-			cfg.initializers[key].Initialize()
+		if err = json.Unmarshal(valueJson, ptr); err != nil {
+			return fmt.Errorf("unable to unmarshal pointer for %s: %s", key, err)
 		}
 	}
+
+	return nil
 }
 
-// TODO: make this configurable
-const checkInterval = 15 // seconds
-var once sync.Once
+func loadEnvOverlay() error {
+	if cfg.envFile == "" {
+		return nil
+	}
 
-// LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
-// reference to a struct that will be populated with the config data.
-//
-// This function also sets up a check of the config file for any modifications. If changes are detected the config will be
-// reloaded. Any errors encountered during the re-parsing of the config will terminate the program.
-func LoadConfig(name string, configStruct interface{}) {
-	cfg = getConfig()
-	once.Do(func() {
-		ticker := time.NewTicker(checkInterval * time.Second)
+	_, statErr := os.Stat(cfg.envFile)
+	cfg.envFileExisted = statErr == nil
+
+	if !cfg.envFileExisted {
+		return nil
+	}
+
+	envData, err := readJSONFile(cfg.envFile)
+	if err != nil {
+		return err
+	}
+
+	return processConfigData(envData)
+}
+
+func load() error {
+	lock.Lock()
+	defer lock.Unlock()
+
+	baseData, err := readJSONFile(cfg.baseFile)
+	if err != nil {
+		return err
+	}
+
+	if err := processConfigData(baseData); err != nil {
+		return err
+	}
+
+	if err := loadEnvOverlay(); err != nil {
+		return err
+	}
+
+	for _, ptr := range cfg.configPtrs {
+		initializeIfSupported(ptr)
+	}
+
+	cfg.lastLoad = time.Now()
+	return nil
+}
+
+// DisableHotReload prevents the config file from being watched for changes.
+// If called before LoadConfig, the watcher goroutine is never started.
+// If called after, the existing watcher is stopped.
+// Safe to call multiple times.
+func DisableHotReload() {
+	hotReloadDisabled.Store(true)
+	hotReloadStopOnce.Do(func() {
+		if hotReloadStop != nil {
+			close(hotReloadStop)
+		}
+	})
+}
+
+func shouldReload() bool {
+	lock.Lock()
+	lastLoad := cfg.lastLoad
+	envFileExisted := cfg.envFileExisted
+	lock.Unlock()
+
+	baseInfo, err := os.Stat(cfg.baseFile)
+	if err != nil {
+		log.Printf("config reload: unable to stat file (%s): %s", cfg.baseFile, err)
+		return false
+	}
+
+	if baseInfo.ModTime().Sub(lastLoad) > 0 {
+		return true
+	}
+
+	if cfg.envFile != "" {
+		envInfo, err := os.Stat(cfg.envFile)
+		envExists := err == nil
+
+		if envExists && envInfo.ModTime().Sub(lastLoad) > 0 {
+			return true
+		}
+
+		if envExists != envFileExisted {
+			return true
+		}
+	}
+
+	return false
+}
+
+func startHotReload() {
+	if hotReloadDisabled.Load() {
+		return
+	}
+	hotReloadStart.Do(func() {
+		if hotReloadDisabled.Load() {
+			return
+		}
+		hotReloadStop = make(chan struct{})
+		ticker := time.NewTicker(time.Duration(checkInterval) * time.Second)
 		go func() {
-			for range ticker.C {
-				fileInfo, err := os.Stat(cfg.getConfigFile())
-				if err != nil {
-					panic(fmt.Errorf("unable state file (%s): %s", cfg.getConfigFile(), err))
-				}
-				if fileInfo.ModTime().Sub(cfg.lastLoad) > 0 {
-					load()
+			for {
+				select {
+				case <-hotReloadStop:
+					ticker.Stop()
+					return
+				case <-ticker.C:
+					if shouldReload() {
+						if err := load(); err != nil {
+							log.Printf("config reload: %s", err)
+						}
+					}
 				}
 			}
 		}()
 	})
+}
+
+// LoadConfig takes a string (which matches one of the top level JSON keys in the config) and a
+// reference to a struct that will be populated with the config data.
+//
+// If the config struct implements the Initializer interface, Initialize() is called automatically
+// after the first load and again on each hot reload.
+//
+// This function also sets up a check of the config file for any modifications. If changes are detected the config will be
+// reloaded. Any errors encountered during a reload are logged and the previous configuration is retained.
+// Hot reloading can be disabled by calling DisableHotReload.
+func LoadConfig(name string, configStruct any) {
+	cfg = getConfig()
+	startHotReload()
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	cfgPtr, ok := cfg.configPtrs[name]
 	if ok {
@@ -144,20 +315,13 @@ func LoadConfig(name string, configStruct interface{}) {
 	} else {
 		configData, ok := cfg.configs[name]
 		if !ok {
-			panic(fmt.Errorf("key (%s) not found in config file (%s)", name, cfg.getConfigFile()))
+			panic(fmt.Errorf("key (%s) not found in config file (%s)", name, cfg.baseFile))
 		}
-		err := json.Unmarshal(configData, &configStruct)
+		err := json.Unmarshal(configData, configStruct)
 		if err != nil {
 			panic(fmt.Errorf("unable to unmarshal (%s) to struct: %s", configData, err))
 		}
-		cfg.configPtrs[name] = &configStruct
+		cfg.configPtrs[name] = configStruct
+		initializeIfSupported(configStruct)
 	}
-}
-
-// RegisterInitializer 'registers' the struct as being able to be initialized and runs that routine.
-//
-//	TODO: this should be replaced as this should be done programmatically
-func RegisterInitializer(name string, initFunc Initializer) {
-	cfg.initializers[name] = initFunc
-	initFunc.Initialize()
 }

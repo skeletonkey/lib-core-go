@@ -11,12 +11,13 @@ import (
 	"github.com/natefinch/lumberjack"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
-	"github.com/skeletonkey/lib-core-go/config"
 )
 
-var log *zerolog.Logger
-var logCfg *Logger
-var lock = &sync.Mutex{}
+//nolint:gochecknoglobals // variables to coordinate the logger singleton
+var (
+	log  *zerolog.Logger
+	lock = &sync.Mutex{}
+)
 
 // Initialize uses the configuration info in the Logger struct to set up the rs/zerolog instance
 func (l *Logger) Initialize() {
@@ -69,13 +70,21 @@ func (l *Logger) Initialize() {
 	log = &tempLog
 }
 
-var once sync.Once
-
 // Get a reference to the zerolog.Logger with the appropriate configured settings.
 func Get() *zerolog.Logger {
-	logCfg = getConfig()
-	once.Do(func() {
-		config.RegisterInitializer("logger", logCfg)
-	})
-	return log
+	getConfig()
+
+	lock.Lock()
+	currentLog := log
+	lock.Unlock()
+
+	return currentLog
+}
+
+// HandleErr is a helper function to log errors but do nothing else. Should be used in places were errors are being ignored.
+func HandleErr(err error, msg string) {
+	if err != nil {
+		log := Get()
+		log.Error().Err(err).Msg(msg)
+	}
 }

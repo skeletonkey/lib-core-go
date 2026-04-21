@@ -4,17 +4,35 @@ Core libraries for running a service
 
 ## config
 
-Configuration library that reads from a JSON file and supports 'hot reloading.'
+Configuration library that reads from JSON files and supports hot reloading with environment-based overlays.
 
-Location of the project's config JSON file is currently in the environmental variable `PROJECT_CONFIG_FILE`.
+### Environment Variables
 
-### JSON config file
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PROJECT_CONFIG_FILE` | Yes | — | Base config filename (e.g., `config.json`) |
+| `PROJECT_CONFIG_DIR` | No | `.` | Colon-separated list of directories to search for config files. First directory containing the base file wins. |
+| `PROJECT_CONFIG_ENV_VAR` | No | — | Name of the env var holding the environment name. Used to find the overlay file. |
+| `PROJECT_CONFIG_CHECK_INTERVAL` | No | `15` | Hot reload check interval in seconds. Must be a positive integer. |
+
+### Environment Overlays
+
+When `PROJECT_CONFIG_ENV_VAR` is set, the system reads the env var it names to determine the environment. An overlay file named `{base}_{env}.{ext}` is loaded on top of the base config.
+
+For example, with `PROJECT_CONFIG_FILE=config.json`, `PROJECT_CONFIG_ENV_VAR=DEPLOY_ENV`, and `DEPLOY_ENV=prod`:
+1. Searches for `config.json` in each directory listed in `PROJECT_CONFIG_DIR`
+2. Loads `config.json` as the base configuration
+3. If `config_prod.json` exists in the same directory, overlays it on top
+
+The overlay only needs to specify fields that differ from the base. Fields not present in the overlay retain their base values. This means `config.json` can be safely checked into source control with non-sensitive defaults, while `config_prod.json` holds environment-specific overrides.
+
+### JSON Config File
 
 The config file should be a JSON object with the top level keys being used as identifiers to the values (also JSON objects) which will be mapped to structs.
 
 #### Example
 
-JSON:
+Base config (`config.json`):
 
 ```json
 {
@@ -26,13 +44,25 @@ JSON:
 }
 ```
 
+Production overlay (`config_prod.json`):
+
+```json
+{
+  "app": {
+    "enabled": false
+  }
+}
+```
+
+Result: `app` struct has `name: "testing"`, `version: 1`, `enabled: false`.
+
 Go Code:
 
 ```go
 type app struct {
     Name    string `json:"name"`
     Ver     int    `json:"version"`
-    Enabled bool `json:"enabled"`
+    Enabled bool   `json:"enabled"`
 }
 
 func main() {
@@ -41,27 +71,17 @@ func main() {
 }
 ```
 
-### Caveat Emptor
+### Initializer Interface
 
-At this time, 'secrets' are written directly into the config file.
-It is _HIGHLY_ recommended that you DO NOT check it into source control.
-This will hopefully be addressed in the future.
+If your config struct implements `config.Initializer` (an `Initialize()` method), it will be called automatically after the config is loaded and again on each hot reload.
 
-Configuration allows for 'hot reloading.'
-If you change the configuration, it should be live within 15 seconds (currently this is not configurable).
+### Hot Reloading
 
-Hot Reloading things to know:
+Config files are checked for modifications every 15 seconds. If changes are detected, the config is reloaded. Errors during reload are logged and the previous configuration is retained.
 
-* if the config file is modified, changes will be reloaded in 15 seconds
-  * this is not editable
-  * you cannot disable this behavior
-* changing configs for objects that utilize an Initializer doesn't have the desired effect
-  * recommend not changing these settings
-    * if changes are made, restart the service
-    * bug report (entry in the TODO file) has been submitted
-* if the config is messed up (like breaking the JSON) it will cause the program to panic
-  * recommended not to use an editor that auto saves without linting
-  * bug report has been submitted
+Hot reloading can be disabled by calling `config.DisableHotReload()` before or after `LoadConfig`.
+
+Both the base file and environment overlay file are watched for changes.
 
 ## logger
 
